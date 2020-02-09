@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "size-exporter.fullname" . }}-test-connection"
+  labels:
+{{ include "size-exporter.labels" . | indent 4 }}
+  annotations:
+    "helm.sh/hook": test-success
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args:  ['{{ include "size-exporter.fullname" . }}:{{ .Values.service.port }}']
+  restartPolicy: Never

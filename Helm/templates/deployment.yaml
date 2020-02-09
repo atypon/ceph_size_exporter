@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "size-exporter.fullname" . }}
+  namespace: {{ .Values.meta.namespace }}
+  labels:
+    app: {{ include "size-exporter.fullname" . }}
+{{ include "size-exporter.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "size-exporter.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "size-exporter.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '5080'
+    spec:
+      serviceAccountName: {{ include "size-exporter.fullname" . }}
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: sysbus
+          hostPath:
+            path: /sys/bus
+        - name: libmodules
+          hostPath:
+            path: /lib/modules
+        - name: mon-endpoint-volume
+          configMap:
+            name: rook-ceph-mon-endpoints
+            items:
+              - key: data
+                path: mon-endpoints
+      # if hostNetwork: false, the "rbd map" command hangs, see https://github.com/rook/rook/issues/2021
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/tini"]
+          args: ["-g", "--", "/usr/local/bin/wrapper.sh"]
+          ports:
+            - name: http
+              containerPort: 5080
+              protocol: TCP
+#          livenessProbe:
+#            httpGet:
+#              path: /
+#              port: http
+#          readinessProbe:
+#            httpGet:
+#              path: /
+#              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            - name: REPLICA_POOL
+              value: {{ .Values.meta.replica_pool }}
+            - name: DRIVER
+              value: {{ .Values.meta.driver }}
+            - name: KUBERNETES_SERVICE_HOST
+              value: {{ .Values.meta.kubernetes_cluster }}
+            - name: KUBERNETES_SERVICE_PORT
+              value: "{{ .Values.meta.kubernetes_port }}"
+            - name: EXPORTER_PORT
+              value: "{{ .Values.meta.exporter_port }}"
+            - name: ROOK_ADMIN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: rook-ceph-mon
+                  key: admin-secret
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - mountPath: /dev
+              name: dev
+            - mountPath: /sys/bus
+              name: sysbus
+            - mountPath: /lib/modules
+              name: libmodules
+            - name: mon-endpoint-volume
+              mountPath: /etc/rook
+    volumes:
+      - name: dev
+        hostPath:
+          path: /dev
+      - name: sysbus
+        hostPath:
+          path: /sys/bus
+      - name: libmodules
+        hostPath:
+          path: /lib/modules
+      - name: mon-endpoint-volume
+        configMap:
+          name: rook-ceph-mon-endpoints
+          items:
+            - key: data
+              path: mon-endpoints
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
