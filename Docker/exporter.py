@@ -7,7 +7,10 @@ import json
 import os
 from prometheus_client import start_http_server, Gauge
 import time
-import threading
+import concurrent.futures
+
+MAX_WORKERS = 4
+DEBUG = os.environ['DEBUG']
 
 
 class DiffCounter:
@@ -56,6 +59,8 @@ def getData_csi(pv_dict):
     # get all the PVs with there size and used size
     # for pv in pvs:
     key = next(iter(pv_dict))
+    if DEBUG:
+        print key + " is started"
     image = rbd.Image(ioctxs[pv_dict[key]], key)
     max_size = image.size()
     counter = DiffCounter()
@@ -66,13 +71,15 @@ def getData_csi(pv_dict):
         "used": current_size
     }
     image.close()
+    if DEBUG:
+        print key + " is Done"
+        print data[key]
     # make relation between the PV and the PVC and the NameSpace
 
 
-def getData_flex(pv_dict):
+def getData_flex(pv):
     # get all the PVs with there size and used size
     # for pv in pvs:
-
     image = rbd.Image(ioctx, pv)
     max_size = image.size()
     counter = DiffCounter()
@@ -109,9 +116,8 @@ if __name__ == '__main__':
     # Start up the server to expose the metrics.
     start_http_server(int(os.environ['EXPORTER_PORT']))
     while True:
-        time.sleep(5)
+        time.sleep(60)
         data = {}
-        threads = []
         pvs = []
         k8s_pvcs = v1.list_persistent_volume_claim_for_all_namespaces(watch=False)
         if os.environ['DRIVER'] == 'csi':
@@ -120,24 +126,15 @@ if __name__ == '__main__':
             for key in ioctxs:
                 for value in obj.list(ioctxs[key]):
                     pvs.append({value: key})
-            for pv in pvs:
-                t = threading.Thread(target=getData_csi, args=(pv,))
-                threads.append(t)
-                t.start()
         if os.environ['DRIVER'] == 'flex':
             pvs = obj.list(ioctx)
-            for pv in pvs:
-                t = threading.Thread(target=getData_flex, args=(pv,))
-                threads.append(t)
-                t.start()
-        for x in threads:
-            x.join()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            executor.map(getData_csi, pvs)
         if os.environ['DRIVER'] == 'csi':
             for i in k8s_pvcs.items:
                 if i.spec.volume_name is not None:
                     for j in k8s_pvs.items:
-                        # json.dumps(str(x.spec.csi))
-                        if 'csi' in json.dumps(str(j.spec)):
+                        if 'csi' in json.dumps(str(j.spec)) and i.spec.volume_name == j.metadata.name:
                             cond = remove_di(str(j.spec.csi.volume_handle))
                             if cond in data.keys():
                                 data[cond]["namespace"] = i.metadata.namespace

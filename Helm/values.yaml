@@ -12,6 +12,7 @@ meta:
   driver: csi # or flex
   # used only when driver type is flex
   replica_pool: replicapool
+  debug: False
 
 
 image:

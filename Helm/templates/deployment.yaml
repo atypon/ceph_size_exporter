@@ -70,6 +70,8 @@ spec:
               value: {{ .Values.meta.replica_pool }}
             - name: DRIVER
               value: {{ .Values.meta.driver }}
+            - name: DEBUG
+              value: {{ .Values.meta.debug | quote }}
             - name: KUBERNETES_SERVICE_HOST
               value: {{ .Values.meta.kubernetes_cluster }}
             - name: KUBERNETES_SERVICE_PORT
