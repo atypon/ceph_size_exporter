@@ -13,7 +13,6 @@ import threading
 class DiffCounter:
     def __init__(self):
         self.count = 0
-
     def cb_offset(self, offset, length, exists):
         if exists:
             self.count += length
@@ -99,9 +98,11 @@ def f():
                 pv_size_used.labels(pv, data[pv]['pvc_name'], data[pv]['namespace']).set(data[pv]['used'])
 
 
-def remove_di(str):
-    out = str.split('-')
-    return "csi-vol-" + out[5] + '-' + out[6] + '-' + out[7] + '-' + out[8] + '-' + out[9]
+def remove_di(volume_handle):
+    out = volume_handle.split('-')
+    length = len(out)
+    return "csi-vol-" + out[length - 5] + '-' + out[length - 4] + '-' + out[length - 3] + '-' + out[length - 2] + '-' \
+           + out[length - 1]
 
 
 if __name__ == '__main__':
